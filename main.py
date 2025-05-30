@@ -1,69 +1,82 @@
-import combate
-import interfaz
+from pokemon import Pokemon, Attack
+from trainer import Trainer
+from battle import Battle
+from ai import AI
 
-# Inicialización
-# Crear ataques
-ataque_fuego = combate.Ataque("Llamarada", 50, "fuego")
-ataque_agua = combate.Ataque("Pistola de Agua", 40, "agua")
-ataque_planta = combate.Ataque("Hoja Afilada", 45, "planta")
+def create_pokemon(name, type, hp, attacks):
+    attack_list = [Attack(attack[0], attack[1], attack[2]) for attack in attacks]
+    return Pokemon(name, type, hp, attack_list)
 
-# Crear pokemons
-pokemon_jugador = combate.Pokemon("Charmander", "fuego", 100, [ataque_fuego, ataque_agua])
-pokemon_ia = combate.Pokemon("Bulbasaur", "planta", 100, [ataque_planta, ataque_fuego])
+def main():
+    # Create Pokemon
+    charmander = create_pokemon("Charmander", "Fire", 45, [("Scratch", "Normal", 45), ("Ember", "Fire", 45)])
+    squirtle = create_pokemon("Squirtle", "Water", 44, [("Tackle", "Normal", 40), ("Water Gun", "Water", 40)])
+    bulbasaur = create_pokemon("Bulbasaur", "Grass", 45, [("Tackle", "Normal", 40), ("Vine Whip", "Grass", 45)])
+    pikachu = create_pokemon("Pikachu", "Electric", 35, [("Quick Attack", "Normal", 40), ("Thunder Shock", "Electric", 40)])
 
-# Crear entrenadores
-jugador = combate.Entrenador("Ash", [pokemon_jugador])
-ia = combate.Entrenador("Equipo Rocket", [pokemon_ia])
+    # Create Trainers
+    trainer1 = Trainer("Ash", [charmander])
+    trainer2 = Trainer("AI", [bulbasaur])
 
-# Asignar pokemon iniciales
-jugador.pokemon_activo = pokemon_jugador
-ia.pokemon_activo = pokemon_ia
+    # Create AI
+    ai = AI(depth=1)
 
-# Bucle del juego
-juego_terminado = False
-turno = "jugador"  # El jugador empieza
+    # Create Battle
+    battle = Battle(trainer1, trainer2)
 
-def aplicar_ataque(atacante, defensor, nombre_ataque):
-    """Aplica un ataque del atacante al defensor."""
-    ataque = combate.seleccionar_ataque(atacante.pokemon_activo, nombre_ataque)
-    if ataque:
-        danio = combate.calcular_danio(ataque, atacante.pokemon_activo, defensor.pokemon_activo)
-        combate.aplicar_danio(defensor.pokemon_activo, danio)
-        interfaz.mostrar_resultado(ataque, danio, defensor.pokemon_activo.nombre)
-    else:
-        print("Ataque no encontrado.")
+    # Game loop
+    while not battle.battle_over():
+        current_trainer = battle.get_current_trainer()
+        opponent_trainer = battle.get_opponent_trainer()
 
-def verificar_si_hay_ganador():
-    """Verifica si hay un ganador."""
-    if combate.esta_debilitado(jugador.pokemon_activo):
-        return "IA"
-    elif combate.esta_debilitado(ia.pokemon_activo):
-        return "Jugador"
-    return None
+        print(f"\n--- Turn {battle.turn + 1} ---")
+        print(f"{current_trainer.name}'s turn")
+        print(f"{current_trainer.active_pokemon}")
+        print(f"{opponent_trainer.active_pokemon}")
 
-def cambiar_turno():
-    """Cambia el turno."""
-    global turno
-    if turno == "jugador":
-        turno = "ia"
-    else:
-        turno = "jugador"
+        if current_trainer.name == "Ash":  # Human player
+            # Display available attacks
+            for i, attack in enumerate(current_trainer.active_pokemon.attacks):
+                print(f"{i + 1}. {attack}")
 
-while not juego_terminado:
-    interfaz.mostrar_info_combate(jugador, ia)
-    if turno == "jugador":
-        ataque = interfaz.leer_entrada_usuario()
-        aplicar_ataque(jugador, ia, ataque)
-    else:
-        print("Turno de la IA...")
-        # ataque = combate.elegir_mejor_ataque_minimax()  # Implementar Minimax
-        ataque = "Llamarada" #temporal
-        aplicar_ataque(ia, jugador, ataque)
+            # Get player's choice
+            while True:
+                try:
+                    choice = int(input("Choose an attack: ")) - 1
+                    if 0 <= choice < len(current_trainer.active_pokemon.attacks):
+                        attack = current_trainer.choose_attack(choice)
+                        break
+                    else:
+                        print("Invalid choice.")
+                except ValueError:
+                    print("Invalid input.")
+        else:  # AI player
+            attack_index = ai.choose_best_attack(battle)
+            attack = current_trainer.choose_attack(attack_index)
+            print(f"AI chose attack: {attack}")
 
-    interfaz.mostrar_estado_actual(jugador, ia)
-    ganador = verificar_si_hay_ganador()
-    if ganador:
-        juego_terminado = True
-        interfaz.mostrar_mensaje_fin_combate(ganador)
-    else:
-        cambiar_turno()
+        # Perform attack
+        damage = battle.perform_attack(attack, current_trainer.active_pokemon, opponent_trainer.active_pokemon)
+        print(f"{current_trainer.active_pokemon.name} used {attack.name} and dealt {damage} damage.")
+        print(f"{opponent_trainer.active_pokemon}")
+
+        # Check if opponent fainted
+        if battle.check_fainted(opponent_trainer.active_pokemon):
+            print(f"{opponent_trainer.active_pokemon.name} fainted!")
+            if not opponent_trainer.has_available_pokemon():
+                break
+            else:
+                #Switch pokemon
+                opponent_trainer.switch_pokemon(0)
+                print(f"{opponent_trainer.name} sends out {opponent_trainer.active_pokemon}!")
+
+        # Switch turn
+        battle.switch_turn()
+
+    # Determine winner
+    winner = battle.get_winner()
+    print(f"\n--- Battle Over ---")
+    print(f"{winner.name} wins!")
+
+if __name__ == "__main__":
+    main()
