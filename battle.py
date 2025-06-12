@@ -15,9 +15,19 @@ class Battle:
         }
 
     def calculate_damage(self, attack, attacker, defender):
+        if attack is None or attacker is None or defender is None:
+            return 0 
+
+        if attack.type not in self.type_chart:
+            return attack.power  
+
+        if defender.type not in self.type_chart[attack.type]:
+            return attack.power  
+
         type_effectiveness = self.type_chart[attack.type][defender.type]
         damage = attack.power * type_effectiveness
         return damage
+
 
     def perform_attack(self, attack, attacker, defender):
         damage = self.calculate_damage(attack, attacker, defender)
