@@ -1,4 +1,4 @@
-# PokeMeans
+# Pokeminmax
 # Proyecto-IA
 # Alejandro Garzon Mayorga - 2266088
 # Andres Narvaez - 2259545
