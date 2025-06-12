@@ -1,175 +1,333 @@
+# gui.py
 import tkinter as tk
 from tkinter import messagebox
-import random
-from pokemon import Pokemon, Attack
+from PIL import Image, ImageTk
 from trainer import Trainer
-from battle import Battle
+from battle import Battle, Attack
 from ai import AI
+import random
+from tkinter import ttk
 
-# Crear Pokémon
-charmander = Pokemon("Charmander", "Fire", 100, [Attack("Scratch", "Normal", 40), Attack("Ember", "Fire", 50)])
-squirtle = Pokemon("Squirtle", "Water", 100, [Attack("Tackle", "Normal", 40), Attack("Water Gun", "Water", 50)])
-bulbasaur = Pokemon("Bulbasaur", "Grass", 100, [Attack("Tackle", "Normal", 40), Attack("Vine Whip", "Grass", 50)])
-pikachu = Pokemon("Pikachu", "Electric", 100, [Attack("Quick Attack", "Normal", 40), Attack("Thunder Shock", "Electric", 50)])
+class PokemonBattleGUI:
+    def __init__(self, all_pokemons):
+        self.all_pokemons = all_pokemons
+        self.selected_player_pokemons = []
+        self.selected_ai_pokemons = random.sample([p for p in all_pokemons], 3)
+        self.window = tk.Tk()
+        self.window.title("Pokemon Battle")
+        self.trainer1 = None
+        self.trainer2 = None
+        self.battle = None
+        self.ai = None
+        self.current_attack_buttons = []
+        self.image_labels = []
+        
+        # Configurar la pantalla de selección
+        self.setup_selection_screen()
 
-pokemon_options = [charmander, squirtle, bulbasaur, pikachu]
+    def setup_selection_screen(self):
+        # Limpiar todos los widgets actuales
+        for widget in self.window.winfo_children():
+            widget.destroy()
+        
+        # Crear un frame principal
+        main_frame = tk.Frame(self.window)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Crear un label para indicar que se debe seleccionar un Pokémon
+        tk.Label(main_frame, text="Selecciona 3 Pokémon:", font=("Arial", 14, "bold")).pack(pady=10)
+        
+        # Crear el contador de selección
+        self.selection_status = tk.Label(main_frame, text="Seleccionados: 0/3", font=("Arial", 12))
+        self.selection_status.pack(pady=10)
+        
+        # Crear un frame para la cuadrícula
+        grid_frame = tk.Frame(main_frame)
+        grid_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Organizar los Pokémon en una cuadrícula
+        row = 0
+        col = 0
+        for pokemon in self.all_pokemons:
+            # Crear un frame para cada Pokémon
+            pokemon_frame = tk.Frame(grid_frame, borderwidth=2, relief="solid", padx=5, pady=5)
+            pokemon_frame.grid(row=row, column=col, padx=5, pady=5)
+            
+            # Cargar y mostrar la imagen del Pokémon
+            try:
+                img = Image.open(pokemon['image_path'])
+                img = img.resize((80, 80))
+                img = ImageTk.PhotoImage(img)
+                label = tk.Label(pokemon_frame, image=img)
+                label.image = img
+                label.pack()
+            except Exception as e:
+                print(f"Error al cargar imagen de {pokemon['name']}: {e}")
+            
+            # Mostrar nombre y tipo
+            name_label = tk.Label(pokemon_frame, text=f"{pokemon['name']}\n{pokemon['type']}")
+            name_label.pack()
+            
+            # Botón de selección
+            btn = tk.Button(pokemon_frame, text="Seleccionar", command=lambda p=pokemon: self.select_pokemon(p))
+            btn.pack()
+            
+            # Actualizar posición para la siguiente columna
+            col += 1
+            if col >= 6:  # 6 Pokémon por fila
+                col = 0
+                row += 1
+        
+        # Ajustar el tamaño de la ventana
+        self.window.geometry("800x600")
+        
+        # Centrar la ventana en la pantalla
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.window.winfo_screenheight() // 2) - (height // 2)
+        self.window.geometry(f'{width}x{height}+{x}+{y}')
 
-# Función para seleccionar Pokémon
-selected_pokemon = None
-selected_ai_pokemon = None
+    def select_pokemon(self, pokemon):
+        if pokemon in self.selected_ai_pokemons:
+            return  # No permitir seleccionar Pokémon de la IA
+            
+        if pokemon in self.selected_player_pokemons:
+            self.selected_player_pokemons.remove(pokemon)
+        else:
+            if len(self.selected_player_pokemons) < 3:
+                self.selected_player_pokemons.append(pokemon)
+        
+        # Actualizar el contador
+        self.selection_status.config(text=f"Seleccionados: {len(self.selected_player_pokemons)}/3")
+        
+        # Iniciar la batalla si se han seleccionado 3 Pokémon
+        if len(self.selected_player_pokemons) == 3:
+            self.start_battle()
 
-all_types = ["Normal", "Fire", "Water", "Grass", "Electric"]
+    def start_battle(self):
+        # Limpiar todos los widgets actuales
+        for widget in self.window.winfo_children():
+            widget.destroy()
+        
+        # Crear un frame principal con scroll
+        main_frame = tk.Frame(self.window)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Crear un canvas con scrollbar
+        canvas = tk.Canvas(main_frame)
+        scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Empaquetar el canvas y el scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Crear un frame para el registro de batalla
+        self.battle_log = tk.Text(scrollable_frame, height=10, width=50)
+        self.battle_log.pack(pady=10)
+        
+        # Crear un frame para los Pokémon
+        pokemon_frame = tk.Frame(scrollable_frame)
+        pokemon_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Frame para el Pokémon del jugador
+        player_frame = tk.Frame(pokemon_frame)
+        player_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Frame para el Pokémon de la IA
+        ai_frame = tk.Frame(pokemon_frame)
+        ai_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # Mostrar el Pokémon actual del jugador
+        self.player_pokemon = self.selected_player_pokemons[0]
+        self.player_image = Image.open(self.player_pokemon['image_path'])
+        self.player_image = self.player_image.resize((200, 200))
+        self.player_image = ImageTk.PhotoImage(self.player_image)
+        self.player_label = tk.Label(player_frame, image=self.player_image)
+        self.player_label.pack()
+        
+        # Mostrar el nombre y HP del Pokémon del jugador
+        self.player_info = tk.Label(player_frame, text=f"{self.player_pokemon['name']}\nHP: {self.player_pokemon['hp']}")
+        self.player_info.pack()
+        
+        # Mostrar el Pokémon actual de la IA
+        self.ai_pokemon = self.selected_ai_pokemons[0]
+        self.ai_image = Image.open(self.ai_pokemon['image_path'])
+        self.ai_image = self.ai_image.resize((200, 200))
+        self.ai_image = ImageTk.PhotoImage(self.ai_image)
+        self.ai_label = tk.Label(ai_frame, image=self.ai_image)
+        self.ai_label.pack()
+        
+        # Mostrar el nombre y HP del Pokémon de la IA
+        self.ai_info = tk.Label(ai_frame, text=f"{self.ai_pokemon['name']}\nHP: {self.ai_pokemon['hp']}")
+        self.ai_info.pack()
+        
+        # Crear un frame para los ataques
+        attacks_frame = tk.Frame(scrollable_frame)
+        attacks_frame.pack(pady=10)
+        
+        # Crear botones para cada ataque
+        for i, attack in enumerate(self.player_pokemon['attacks']):
+            btn = tk.Button(attacks_frame, text=attack.name, command=lambda a=attack: self.use_attack(a))
+            btn.grid(row=0, column=i, padx=5)
+        
+        # Crear la instancia de Battle
+        self.battle = Battle(self.player_pokemon, self.ai_pokemon)
+        
+        # Ajustar el tamaño de la ventana
+        self.window.geometry("800x600")
+        
+        # Centrar la ventana en la pantalla
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.window.winfo_screenheight() // 2) - (height // 2)
+        self.window.geometry(f'{width}x{height}+{x}+{y}')
 
-def ensure_complete_type_chart(chart):
-    # Asegurar que todos los tipos estén definidos en cada clonación o simulación (para la IA también)
-    for atk in all_types:
-        if atk not in chart:
-            chart[atk] = {}
-        for defn in all_types:
-            if defn not in chart[atk]:
-                chart[atk][defn] = 1.0
+    def use_attack(self, attack):
+        # Ejecutar el ataque a través de la clase Battle
+        result = self.battle.execute_turn(attack)
+        
+        # Actualizar la interfaz según el resultado
+        if result['player_attack']:
+            self.battle_log.insert(tk.END, f"{self.player_pokemon['name']} usó {attack.name} y causó {result['player_damage']} de daño a {self.ai_pokemon['name']}\n")
+            self.ai_info.config(text=f"{self.ai_pokemon['name']}\nHP: {max(0, self.ai_pokemon['hp'])}")
+        
+        if result['ai_attack']:
+            self.battle_log.insert(tk.END, f"{self.ai_pokemon['name']} usó {result['ai_attack'].name} y causó {result['ai_damage']} de daño a {self.player_pokemon['name']}\n")
+            self.player_info.config(text=f"{self.player_pokemon['name']}\nHP: {max(0, self.player_pokemon['hp'])}")
+        
+        self.battle_log.see(tk.END)
+        
+        # Verificar si algún Pokémon ha muerto
+        if result['ai_fainted']:
+            self.battle_log.insert(tk.END, f"{self.ai_pokemon['name']} ha sido derrotado\n")
+            self.battle_log.see(tk.END)
+            
+            # Verificar si la IA se quedó sin Pokémon
+            if len(self.selected_ai_pokemons) <= 1:
+                self.battle_log.insert(tk.END, "¡Has ganado la batalla!\n")
+                self.battle_log.see(tk.END)
+                # Cerrar el juego después de 2 segundos
+                self.window.after(2000, lambda: self.window.destroy())
+                return
+            
+            # Eliminar el Pokémon derrotado de la lista
+            self.selected_ai_pokemons.pop(0)
+            
+            # Actualizar el Pokémon de la IA
+            self.ai_pokemon = self.selected_ai_pokemons[0]
+            self.ai_image = Image.open(self.ai_pokemon['image_path'])
+            self.ai_image = self.ai_image.resize((200, 200))
+            self.ai_image = ImageTk.PhotoImage(self.ai_image)
+            self.ai_label.config(image=self.ai_image)
+            self.ai_info.config(text=f"{self.ai_pokemon['name']}\nHP: {self.ai_pokemon['hp']}")
+            
+            # Actualizar la instancia de Battle
+            self.battle = Battle(self.player_pokemon, self.ai_pokemon)
+        
+        if result['player_fainted']:
+            self.battle_log.insert(tk.END, f"{self.player_pokemon['name']} ha sido derrotado\n")
+            self.battle_log.see(tk.END)
+            
+            # Verificar si el jugador se quedó sin Pokémon
+            if len(self.selected_player_pokemons) <= 1:
+                self.battle_log.insert(tk.END, "¡Has perdido la batalla!\n")
+                self.battle_log.see(tk.END)
+                # Cerrar el juego después de 2 segundos
+                self.window.after(2000, lambda: self.window.destroy())
+                return
+            
+            # Eliminar el Pokémon derrotado de la lista
+            self.selected_player_pokemons.pop(0)
+            
+            # Mostrar la pantalla de selección de Pokémon
+            self.show_pokemon_selection()
 
-    chart["Electric"]["Water"] = 2.0
-    chart["Electric"]["Grass"] = 0.5
-    chart["Electric"]["Electric"] = 0.5
+    def select_battle_pokemon(self, pokemon):
+        # Seleccionar el nuevo Pokémon
+        self.player_pokemon = pokemon
+        
+        # Volver a la batalla
+        self.start_battle()
+        
+        # Añadir mensaje al registro de batalla
+        self.battle_log.insert(tk.END, f"Has cambiado a {pokemon['name']}\n")
+        self.battle_log.see(tk.END)
+        
+        # Actualizar la instancia de Battle con el nuevo Pokémon
+        self.battle = Battle(self.player_pokemon, self.ai_pokemon)
 
-    chart["Water"]["Electric"] = 0.5
-    chart["Fire"]["Electric"] = 1.0
-    chart["Grass"]["Electric"] = 1.0
-    chart["Normal"]["Electric"] = 1.0
-    for atk in all_types:
-        if atk not in chart:
-            chart[atk] = {}
-        for defn in all_types:
-            if defn not in chart[atk]:
-                chart[atk][defn] = 1.0
+    def show_pokemon_selection(self):
+        # Limpiar todos los widgets actuales
+        for widget in self.window.winfo_children():
+            widget.destroy()
+        
+        # Crear un frame principal
+        main_frame = tk.Frame(self.window)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Crear un título
+        title = tk.Label(main_frame, text="Selecciona tu siguiente Pokémon", font=("Arial", 16))
+        title.pack(pady=20)
+        
+        # Crear un frame para los Pokémon
+        pokemon_frame = tk.Frame(main_frame)
+        pokemon_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Mostrar los Pokémon disponibles
+        for i, pokemon in enumerate(self.selected_player_pokemons):
+            # Crear un frame para cada Pokémon
+            pokemon_container = tk.Frame(pokemon_frame)
+            pokemon_container.grid(row=0, column=i, padx=10)
+            
+            # Mostrar la imagen del Pokémon
+            image = Image.open(pokemon['image_path'])
+            image = image.resize((150, 150))
+            photo = ImageTk.PhotoImage(image)
+            label = tk.Label(pokemon_container, image=photo)
+            label.image = photo  # Mantener una referencia
+            label.pack()
+            
+            # Mostrar el nombre y HP del Pokémon
+            info = tk.Label(pokemon_container, text=f"{pokemon['name']}\nHP: {pokemon['hp']}")
+            info.pack()
+            
+            # Crear un botón para seleccionar el Pokémon
+            btn = tk.Button(pokemon_container, text="Seleccionar", 
+                          command=lambda p=pokemon: self.select_battle_pokemon(p))
+            btn.pack()
+        
+        # Ajustar el tamaño de la ventana
+        self.window.geometry("800x400")
+        
+        # Centrar la ventana en la pantalla
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = (self.window.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.window.winfo_screenheight() // 2) - (height // 2)
+        self.window.geometry(f'{width}x{height}+{x}+{y}')
 
-    chart["Electric"]["Water"] = 2.0
-    chart["Electric"]["Grass"] = 0.5
-    chart["Electric"]["Electric"] = 0.5
-
-    chart["Water"]["Electric"] = 0.5
-    chart["Fire"]["Electric"] = 1.0
-    chart["Grass"]["Electric"] = 1.0
-    chart["Normal"]["Electric"] = 1.0
-
-def start_battle():
-    global all_types
-    global selected_pokemon, selected_ai_pokemon, trainer1, trainer2, battle, ai
-
-    if selected_pokemon is None:
-        messagebox.showerror("Error", "Por favor selecciona un Pokémon")
-        return
-
-    selected_ai_pokemon = random.choice([p for p in pokemon_options if p != selected_pokemon])
-
-    trainer1 = Trainer("Ash", [selected_pokemon])
-    trainer2 = Trainer("AI", [selected_ai_pokemon])
-    battle = Battle(trainer1, trainer2)
-
-    ensure_complete_type_chart(battle.type_chart)
-
-    ai = AI(depth=2)
-    select_frame.pack_forget()
-    create_battle_ui()
-    update_ui()
-
-# Interfaz de selección
-root = tk.Tk()
-root.title("Combate Pokémon")
-
-select_frame = tk.Frame(root)
-select_frame.pack(padx=10, pady=10)
-
-tk.Label(select_frame, text="Selecciona tu Pokémon").pack(pady=5)
-
-for pokemon in pokemon_options:
-    btn = tk.Button(select_frame, text=str(pokemon), command=lambda p=pokemon: select_pokemon(p))
-    btn.pack(pady=2)
-
-def select_pokemon(pokemon):
-    global selected_pokemon
-    selected_pokemon = Pokemon(pokemon.name, pokemon.type, pokemon.max_hp, [Attack(a.name, a.type, a.power) for a in pokemon.attacks])
-    start_battle()
-
-# Combate UI
-frame = tk.Frame(root)
-status_label = tk.Label(frame, text="")
-player_hp = tk.Label(frame, text="")
-ai_hp = tk.Label(frame, text="")
-attack_frame = tk.LabelFrame(frame, text="Ataques")
-attack_buttons = []
-
-def create_battle_ui():
-    frame.pack(padx=10, pady=10)
-    status_label.pack(pady=5)
-    player_hp.pack()
-    ai_hp.pack()
-    attack_frame.pack(pady=10)
-    for btn in attack_buttons:
-        btn.destroy()
-    attack_buttons.clear()
-
-    current_attacks = battle.get_current_trainer().active_pokemon.attacks
-    for i, attack in enumerate(current_attacks):
-        btn = tk.Button(attack_frame, text=str(attack), width=25, command=lambda i=i: on_attack(i))
-        btn.pack(pady=2)
-        attack_buttons.append(btn)
-
-def update_ui():
-    status_label.config(text=f"Turno de {battle.get_current_trainer().name}")
-    player_hp.config(text=f"{trainer1.active_pokemon.name} HP: {trainer1.active_pokemon.hp:.0f}/{trainer1.active_pokemon.max_hp}")
-    ai_hp.config(text=f"{trainer2.active_pokemon.name} HP: {trainer2.active_pokemon.hp:.0f}/{trainer2.active_pokemon.max_hp}")
-
-def disable_buttons():
-    for btn in attack_buttons:
-        btn.config(state=tk.DISABLED)
-
-def enable_buttons():
-    for btn in attack_buttons:
-        btn.config(state=tk.NORMAL)
-
-def on_attack(index):
-    current_trainer = battle.get_current_trainer()
-    opponent_trainer = battle.get_opponent_trainer()
-
-    attack = current_trainer.choose_attack(index)
-    damage = battle.perform_attack(attack, current_trainer.active_pokemon, opponent_trainer.active_pokemon)
-
-    status = f"{current_trainer.active_pokemon.name} usó {attack.name} e hizo {damage:.0f} de daño."
-    status_label.config(text=status)
-
-    if battle.check_fainted(opponent_trainer.active_pokemon):
-        status_label.config(text=status + f"\n{opponent_trainer.active_pokemon.name} se debilitó!")
-        if not opponent_trainer.has_available_pokemon():
-            messagebox.showinfo("Fin del combate", f"{current_trainer.name} gana el combate!")
-            disable_buttons()
+    def check_battle_state(self, msg, player_turn):
+        if self.battle.battle_over():
+            winner = self.battle.get_winner()
+            messagebox.showinfo("Game Over", f"{winner.name} wins!")
+            self.window.quit()
             return
 
-    battle.switch_turn()
-    update_ui()
-    root.after(1000, ai_turn)
+        self.update_battle_screen()
 
-def ai_turn():
-    if battle.get_current_trainer().name != "AI":
-        return
-
-    attack_index = ai.choose_best_attack(battle)
-    attack = battle.get_current_trainer().choose_attack(attack_index)
-    damage = battle.perform_attack(attack, battle.get_current_trainer().active_pokemon, battle.get_opponent_trainer().active_pokemon)
-
-    status = f"{battle.get_current_trainer().active_pokemon.name} usó {attack.name} e hizo {damage:.0f} de daño."
-    status_label.config(text=status)
-
-    if battle.check_fainted(battle.get_opponent_trainer().active_pokemon):
-        status_label.config(text=status + f"\n{battle.get_opponent_trainer().active_pokemon.name} se debilitó!")
-        if not battle.get_opponent_trainer().has_available_pokemon():
-            messagebox.showinfo("Fin del combate", f"{battle.get_current_trainer().name} gana el combate!")
-            disable_buttons()
-            return
-
-    battle.switch_turn()
-    update_ui()
-    enable_buttons()
-
-root.mainloop()
+    def run(self):
+        self.window.mainloop()

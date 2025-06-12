@@ -1,0 +1,14 @@
+# Archivos Python
+script.py
+
+# Entorno virtual
+venv/
+__pycache__/
+*.pyc
+
+# Directorio de sprites
+sprites/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db 
